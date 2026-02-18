@@ -230,7 +230,7 @@ module.exports = class extends Listener {
 				if (guildSettings?.logChannel) {
 					const logChannel = client.channels.cache.get(guildSettings.logChannel);
 					if (logChannel) {
-						logChannel.send(`${targetUser.toString()} criou um ticket com o motivo: **${topic || 'Sem motivo'}**`);
+						logChannel.send(`${targetUser.toString()} criou um ticket${topic ? ` com o motivo: **${topic}**` : ''}`);
 					}
 				}
 
