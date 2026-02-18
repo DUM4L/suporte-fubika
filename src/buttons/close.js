@@ -26,8 +26,10 @@ module.exports = class CloseButton extends Button {
 			const ticket = await client.tickets.getTicket(interaction.channel.id, true);
 			const getMessage = client.i18n.getLocale(ticket.guild.locale);
 			const staff = await isStaff(interaction.guild, interaction.user.id);
+			const isCreator = interaction.user.id === ticket.createdById;
 
-			if (id.expect === 'staff' && !staff) {
+			// staff e criador do ticket sempre podem fechar
+			if (!staff && !isCreator) {
 				return await interaction.reply({
 					embeds: [
 						new ExtendedEmbedBuilder()
@@ -36,46 +38,35 @@ module.exports = class CloseButton extends Button {
 					],
 					flags: MessageFlags.Ephemeral,
 				});
-			} else if (id.expect === 'user' && interaction.user.id !== ticket.createdById && !staff) {
-				// staff pode fechar mesmo quando o sistema espera confirmação do usuário
-				return await interaction.reply({
-					embeds: [
-						new ExtendedEmbedBuilder()
-							.setColor(ticket.guild.errorColour)
-							.setDescription(getMessage('ticket.close.wait_for_user')),
-					],
-					flags: MessageFlags.Ephemeral,
-				});
-			} else {
-				if (id.accepted) {
-					if (
-						ticket.createdById === interaction.user.id &&
-						ticket.category.enableFeedback &&
-						!ticket.feedback
-					) {
-						return await interaction.showModal(client.tickets.buildFeedbackModal(ticket.guild.locale, { next: 'acceptClose' }));
-					} else {
-						await interaction.deferReply();
-						await client.tickets.acceptClose(interaction);
-					}
-				} else {
-					try {
-						await interaction.update({
-							components: [],
-							embeds: [
-								new ExtendedEmbedBuilder({
-									iconURL: interaction.guild.iconURL(),
-									text: ticket.guild.footer,
-								})
-									.setColor(ticket.guild.errorColour)
-									.setDescription(getMessage('ticket.close.rejected', { user: interaction.user.toString() }))
-									.setFooter({ text: null }),
-							],
-						});
+			}
 
-					} finally {
-						client.tickets.$stale.delete(ticket.id);
-					}
+			if (id.accepted) {
+				if (
+					isCreator &&
+					ticket.category.enableFeedback &&
+					!ticket.feedback
+				) {
+					return await interaction.showModal(client.tickets.buildFeedbackModal(ticket.guild.locale, { next: 'acceptClose' }));
+				} else {
+					await interaction.deferReply();
+					await client.tickets.acceptClose(interaction);
+				}
+			} else {
+				try {
+					await interaction.update({
+						components: [],
+						embeds: [
+							new ExtendedEmbedBuilder({
+								iconURL: interaction.guild.iconURL(),
+								text: ticket.guild.footer,
+							})
+								.setColor(ticket.guild.errorColour)
+								.setDescription(getMessage('ticket.close.rejected', { user: interaction.user.toString() }))
+								.setFooter({ text: null }),
+						],
+					});
+				} finally {
+					client.tickets.$stale.delete(ticket.id);
 				}
 			}
 		}
