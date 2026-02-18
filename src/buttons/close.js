@@ -23,7 +23,7 @@ module.exports = class CloseButton extends Button {
 			// the close button on the opening message, the same as using /close
 			await client.tickets.beforeRequestClose(interaction);
 		} else {
-			const ticket = await client.tickets.getTicket(interaction.channel.id, true); // true to override cache and load new feedback
+			const ticket = await client.tickets.getTicket(interaction.channel.id, true);
 			const getMessage = client.i18n.getLocale(ticket.guild.locale);
 			const staff = await isStaff(interaction.guild, interaction.user.id);
 
@@ -36,7 +36,8 @@ module.exports = class CloseButton extends Button {
 					],
 					flags: MessageFlags.Ephemeral,
 				});
-			} else if (id.expect === 'user' && interaction.user.id !== ticket.createdById) {
+			} else if (id.expect === 'user' && interaction.user.id !== ticket.createdById && !staff) {
+				// staff pode fechar mesmo quando o sistema espera confirmação do usuário
 				return await interaction.reply({
 					embeds: [
 						new ExtendedEmbedBuilder()
@@ -72,7 +73,7 @@ module.exports = class CloseButton extends Button {
 							],
 						});
 
-					} finally { // this should run regardless of whatever happens above
+					} finally {
 						client.tickets.$stale.delete(ticket.id);
 					}
 				}
