@@ -1358,17 +1358,6 @@ module.exports = class TicketManager {
 		if (ticket.closedById) dmEmbed.addFields(fields.closedById);
 		if (reason) dmEmbed.addFields(fields.reason);
 
-		try {
-			const creator = guild.members.cache.get(ticket.createdById);
-			if (creator) {
-				await creator.send({
-					components,
-					embeds: [dmEmbed],
-				});
-			}
-		} catch (error) {
-			this.client.log.error(error);
-		}
 
 		const fieldsArray = [];
 		if (ticket.topic) fieldsArray.push(fields.topic);
