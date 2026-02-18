@@ -25,10 +25,6 @@ module.exports = class extends Listener {
 		});
 	}
 
-	/**
- 	 * @param {import('@prisma/client').Guild} settings
-	 * @param {import("discord.js").ButtonInteraction|import("discord.js").SelectMenuInteraction} interaction
-	 */
 	async useGuild(settings, interaction, topic) {
 		const getMessage = this.client.i18n.getLocale(settings.locale);
 		if (settings.categories.length === 0) {
@@ -83,14 +79,9 @@ module.exports = class extends Listener {
 					interaction.message.delete();
 				});
 		}
-
 	}
 
-	/**
-	 * @param {import("discord.js").Message} message
-	 */
 	async run(message) {
-		/** @type {import("client")} */
 		const client = this.client;
 
 		if (message.channel.type === ChannelType.DM) {
@@ -154,7 +145,6 @@ module.exports = class extends Listener {
 										),
 									),
 							),
-
 					],
 				});
 				sent.awaitMessageComponent({
@@ -190,7 +180,7 @@ module.exports = class extends Listener {
 			if (message.content.startsWith('$new')) {
 				const args = message.content.split(' ');
 
-				// verifica se o segundo argumento é um userId (17-19 dígitos) ou um categoryId (número pequeno)
+				// busca o membro — funciona tanto para humanos quanto para bots
 				let targetUser = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
 				let categoryId;
 				let topic;
@@ -212,6 +202,10 @@ module.exports = class extends Listener {
 					topic = args.slice(2).join(' ') || null;
 				}
 
+				if (!targetUser) {
+					return message.reply('Não foi possível identificar o usuário.');
+				}
+
 				if (!categoryId) {
 					return message.reply('Uso correto: `$new <categoryId> <motivo>` ou `$new <userId> <categoryId> <motivo>`');
 				}
@@ -228,29 +222,32 @@ module.exports = class extends Listener {
 					where: { id: message.guild.id },
 				});
 
+				// envia log ANTES de criar o ticket
+				const guildSettings = await client.prisma.guild.findUnique({
+					select: { logChannel: true },
+					where: { id: message.guild.id },
+				});
+				if (guildSettings?.logChannel) {
+					const logChannel = client.channels.cache.get(guildSettings.logChannel);
+					if (logChannel) {
+						logChannel.send(`${targetUser.toString()} criou um ticket com o motivo: **${topic || 'Sem motivo'}**`);
+					}
+				}
+
 				return this.client.tickets.create({
 					categoryId,
 					interaction: {
 						channel: message.channel,
 						deferReply: async () => {},
-						editReply: async () => {
-							const guildSettings = await client.prisma.guild.findUnique({
-								select: { logChannel: true },
-								where: { id: message.guild.id },
-							});
-							if (guildSettings?.logChannel) {
-								const logChannel = client.channels.cache.get(guildSettings.logChannel);
-								if (logChannel) {
-									logChannel.send(`${targetUser.toString()} criou um ticket com o motivo: **${topic || 'Sem motivo'}**`);
-								}
-							}
-						},
+						editReply: async () => {},
 						guild: message.guild,
+						guildId: message.guild.id,
 						isModalSubmit: () => false,
 						member: targetUser,
 						options: { getString: () => null },
 						reply: async (data) => message.channel.send(data),
 						showModal: async () => {},
+						// user aponta para o targetUser para que createdById seja o usuário alvo, não o bot
 						user: targetUser.user,
 					},
 					topic,
@@ -365,7 +362,6 @@ module.exports = class extends Listener {
 						],
 					});
 				}
-
 			}
 		}
 	}
