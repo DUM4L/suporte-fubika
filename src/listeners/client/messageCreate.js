@@ -183,6 +183,80 @@ module.exports = class extends Listener {
 			const settings = await client.prisma.guild.findUnique({ where: { id: message.guild.id } });
 			if (!settings) return;
 			const getMessage = client.i18n.getLocale(settings.locale);
+
+			// comando $new
+			// uso: $new <categoryId> <motivo>
+			// uso para terceiros: $new <userId> <categoryId> <motivo>
+			if (message.content.startsWith('$new')) {
+				const args = message.content.split(' ');
+
+				// verifica se o segundo argumento é um userId (17-19 dígitos) ou um categoryId (número pequeno)
+				let targetUser = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+				let categoryId;
+				let topic;
+
+				const secondArg = args[1];
+				const thirdArg = args[2];
+
+				// se o segundo argumento parece um Discord ID (17-19 dígitos), é um userId
+				if (secondArg && /^\d{17,19}$/.test(secondArg) && thirdArg && /^\d+$/.test(thirdArg)) {
+					const targetMember = await message.guild.members.fetch(secondArg).catch(() => null);
+					if (!targetMember) {
+						return message.reply('Usuário não encontrado no servidor.');
+					}
+					targetUser = targetMember;
+					categoryId = thirdArg;
+					topic = args.slice(3).join(' ') || null;
+				} else {
+					categoryId = secondArg;
+					topic = args.slice(2).join(' ') || null;
+				}
+
+				if (!categoryId) {
+					return message.reply('Uso correto: `$new <categoryId> <motivo>` ou `$new <userId> <categoryId> <motivo>`');
+				}
+
+				await message.delete().catch(() => null);
+
+				// garante que o guild está registrado no banco
+				await client.prisma.guild.upsert({
+					create: {
+						id: message.guild.id,
+						locale: client.i18n.locales.find(locale => locale === message.guild.preferredLocale),
+					},
+					update: {},
+					where: { id: message.guild.id },
+				});
+
+				return this.client.tickets.create({
+					categoryId,
+					interaction: {
+						channel: message.channel,
+						deferReply: async () => {},
+						editReply: async () => {
+							const guildSettings = await client.prisma.guild.findUnique({
+								select: { logChannel: true },
+								where: { id: message.guild.id },
+							});
+							if (guildSettings?.logChannel) {
+								const logChannel = client.channels.cache.get(guildSettings.logChannel);
+								if (logChannel) {
+									logChannel.send(`${targetUser.toString()} criou um ticket com o motivo: **${topic || 'Sem motivo'}**`);
+								}
+							}
+						},
+						guild: message.guild,
+						isModalSubmit: () => false,
+						member: targetUser,
+						options: { getString: () => null },
+						reply: async (data) => message.channel.send(data),
+						showModal: async () => {},
+						user: targetUser.user,
+					},
+					topic,
+				});
+			}
+
 			let ticket = await client.prisma.ticket.findUnique({ where: { id: message.channel.id } });
 
 			if (ticket) {
@@ -269,7 +343,7 @@ module.exports = class extends Listener {
 				const cacheKey = `cache/guild-tags:${message.guild.id}`;
 				let tags = await client.keyv.get(cacheKey);
 				if (!tags) {
-					tags = (await client.prisma.tag.findMany({
+					tags = await client.prisma.tag.findMany({
 						select: {
 							content: true,
 							id: true,
@@ -277,8 +351,7 @@ module.exports = class extends Listener {
 							regex: true,
 						},
 						where: { guildId: message.guild.id },
-					}))
-						.sort((a, b) => (b.regex ? b.regex.length : 0) - (a.regex ? a.regex.length : 0));
+					});
 					client.keyv.set(cacheKey, tags, ms('1h'));
 				}
 
